@@ -62,10 +62,9 @@ web UI upgrade path.
 
 Place the firmware `.bin` file in the `firmware/` directory, then run:
 
-```bash
-docker build -t xz005g6-toolbox .
-docker run --rm -v "$(pwd):/work" xz005g6-toolbox build \
-    /work/firmware/XZ005-G6v1_0.2.0_3.0.0_UP_BOOT(250711)_2025-07-13_18.25.08.bin
+```shell
+$ docker build -t xz005g6-toolbox .
+$ docker run --rm -v "$(pwd):/work" xz005g6-toolbox build "/work/firmware/XZ005-G6v1_0.2.0_3.0.0_UP_BOOT(250711)_2025-07-13_18.25.08.bin"
 ```
 
 This produces two files in `output/`:
@@ -83,9 +82,8 @@ where the `sys` command is available.
    your config file (usually `conf.bin`).
 3. Place the downloaded file in the `firmware/` directory and run:
 
-   ```bash
-   docker run --rm -v "$(pwd):/work" xz005g6-toolbox config \
-       /work/firmware/conf.bin
+   ```shell
+   $ docker run --rm -v "$(pwd):/work" xz005g6-toolbox config /work/firmware/conf.bin
    ```
 
    This produces `output/admin_config.bin`.
@@ -110,8 +108,8 @@ to the modem's Ethernet port with a cable. Configure a static IP:
 
 #### 3b. Start the TFTP server (Terminal 2)
 
-```bash
-docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
+```shell
+$ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
 ```
 
 Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
@@ -121,8 +119,8 @@ Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
 Open `COMMANDS.txt` from the `output/` directory. It contains ready-to-paste
 `sys` commands with comments explaining what each does.
 
-```bash
-telnet 192.168.1.1
+```shell
+$ telnet 192.168.1.1
 ```
 
 At the `TP-Link(conf)#` prompt, paste each `sys` command in order:
@@ -185,12 +183,12 @@ Set `EXTRA_FLASH_COMMANDS` before running the build to inject additional
 `flash set` lines into the boot script. Use `&&` as separator (semicolons
 are rejected by the firmware). Examples:
 
-```bash
+```shell
 # Huawei OLT mode (from RTL960x community)
-EXTRA_FLASH_COMMANDS=flash set OMCI_OLT_MODE 1 && flash set OMCI_FAKE_OK 1
+$ EXTRA_FLASH_COMMANDS=flash set OMCI_OLT_MODE 1 && flash set OMCI_FAKE_OK 1
 
 # Full ONU identity clone
-EXTRA_FLASH_COMMANDS=flash set PON_VENDOR_ID HWTC && flash set GPON_ONU_MODEL HG8240H && flash set HW_HWVER BF9.A && flash set OMCI_SW_VER1 V3R017C10S100 && flash set OMCI_SW_VER2 V3R017C10S100
+$ EXTRA_FLASH_COMMANDS=flash set PON_VENDOR_ID HWTC && flash set GPON_ONU_MODEL HG8240H && flash set HW_HWVER BF9.A && flash set OMCI_SW_VER1 V3R017C10S100 && flash set OMCI_SW_VER2 V3R017C10S100
 ```
 
 Community-tested values: [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
