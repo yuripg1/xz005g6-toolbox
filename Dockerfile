@@ -20,3 +20,4 @@ WORKDIR /work
 COPY src/ /opt/patcher/
 
 ENTRYPOINT ["python3", "/opt/patcher/entrypoint.py"]
+
