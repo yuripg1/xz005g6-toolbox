@@ -3,11 +3,14 @@
 XZ005-G6 Toolbox — Docker entrypoint.
 
 Modes:
-  build  FIRMWARE.bin   Extract, patch, rebuild SquashFS, generate commands.
-  config CONF.bin        Decrypt config, set AdminEnable=1, re-encrypt.
+  build  [FIRMWARE.bin]  Extract, patch, rebuild SquashFS, generate commands.
+  config [CONF.bin]      Decrypt config, set AdminEnable=1, re-encrypt.
   serve                  Start atftpd on TFTP_PORT serving output/.
+
+If no file is given, the first .bin in firmware/ or config/ is used.
 """
 
+import glob
 import os
 import subprocess
 import sys
@@ -31,7 +34,21 @@ def run(cmd, check=True):
     return result
 
 
-def mode_build(firmware_path):
+def find_bin(directory, label):
+    """Find the first .bin file in a directory."""
+    bins = sorted(glob.glob(f'{directory}/*.bin'))
+    if not bins:
+        print(f"ERROR: No .bin file found in {directory}/")
+        print(f"Place your {label} file there and try again.")
+        sys.exit(1)
+    if len(bins) > 1:
+        print(f"Found {len(bins)} .bin files in {directory}/, using {os.path.basename(bins[0])}")
+    return bins[0]
+
+
+def mode_build(firmware_path=None):
+    if firmware_path is None:
+        firmware_path = find_bin('/work/firmware', 'firmware')
     if not os.path.exists(firmware_path):
         print(f"ERROR: {firmware_path} not found.")
         sys.exit(1)
@@ -39,7 +56,7 @@ def mode_build(firmware_path):
     bdp_value = os.environ.get('BDP_VALUE', '136')
     extra = os.environ.get('EXTRA_FLASH_COMMANDS', '')
 
-    print("=== Stage 1: Extract SquashFS ===")
+    print(f"=== Stage 1: Extract SquashFS from {os.path.basename(firmware_path)} ===")
     run(f'binwalk -e -q --run-as=root --directory=/tmp/extracted "{firmware_path}"')
 
     sq_path = None
@@ -154,7 +171,10 @@ def mode_build(firmware_path):
     print(f"\n  When verifying with check_md5, expect: {md5}")
 
 
-def mode_config(config_path):
+def mode_config(config_path=None):
+    if config_path is None:
+        config_path = find_bin('/work/config', 'config backup')
+
     if not os.path.exists(config_path):
         print(f"ERROR: {config_path} not found.")
         sys.exit(1)
@@ -162,9 +182,9 @@ def mode_config(config_path):
     os.makedirs('/work/output', exist_ok=True)
     xml_path = '/tmp/config.xml'
     modified_xml = '/tmp/config_admin.xml'
-    output_bin = '/work/output/admin_config.bin'
+    output_bin = '/work/output/conf_admin.bin'
 
-    print("=== Decrypt config backup ===")
+    print(f"=== Decrypt config backup: {os.path.basename(config_path)} ===")
     run(f'python3 {TPCONF} "{config_path}" {xml_path}')
 
     print("=== Set AdminEnable=1 ===")
@@ -200,32 +220,31 @@ def mode_serve():
 
     print(f"Serving {serve_dir} on UDP port {port}...")
     print("Press Ctrl+C to stop.")
-    run(f'atftpd --daemon --no-fork --port {port} {serve_dir}', check=False)
+    try:
+        run(f'atftpd --daemon --no-fork --port {port} {serve_dir}', check=False)
+    except KeyboardInterrupt:
+        print("\nStopped.")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: docker run ... xz005g6-toolbox <mode> [args]")
-        print("  build  FIRMWARE.bin   — Build patched SquashFS")
-        print("  config CONF.bin       — Enable admin in config backup")
-        print("  serve                 — Start TFTP server")
+        print("Usage: docker run ... xz005g6-toolbox <mode> [file]")
+        print("  build             — Build patched SquashFS (auto-discovers firmware/*.bin)")
+        print("  build FILE.bin    — Build from a specific file")
+        print("  config            — Enable admin in config backup (auto-discovers config/*.bin)")
+        print("  config FILE.bin   — Process a specific config file")
+        print("  serve             — Start TFTP server")
         sys.exit(1)
 
     mode = sys.argv[1]
+    arg = sys.argv[2] if len(sys.argv) > 2 else None
 
     if mode == 'build':
-        if len(sys.argv) < 3:
-            print("Usage: ... build FIRMWARE.bin")
-            sys.exit(1)
-        mode_build(sys.argv[2])
+        mode_build(arg)
     elif mode == 'config':
-        if len(sys.argv) < 3:
-            print("Usage: ... config CONF.bin")
-            sys.exit(1)
-        mode_config(sys.argv[2])
+        mode_config(arg)
     elif mode == 'serve':
         mode_serve()
     else:
         print(f"Unknown mode: {mode}")
         sys.exit(1)
-

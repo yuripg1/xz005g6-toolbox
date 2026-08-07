@@ -62,12 +62,13 @@ web UI upgrade path.
 
 Place the firmware `.bin` file in the `firmware/` directory, then run:
 
-```shell
-$ docker build -t xz005g6-toolbox .
-$ docker run --rm -v "$(pwd):/work" xz005g6-toolbox build "/work/firmware/XZ005-G6v1_0.2.0_3.0.0_UP_BOOT(250711)_2025-07-13_18.25.08.bin"
+```bash
+docker build -t xz005g6-toolbox .
+docker run --rm -v "$(pwd):/work" xz005g6-toolbox build
 ```
 
-This produces two files in `output/`:
+The container auto-discovers any `.bin` file in `firmware/`. This produces
+two files in `output/`:
 
 - `patched_rootfs.squashfs` — the patched root filesystem (≈2.4 MB)
 - `COMMANDS.txt` — all `sys` commands ready to paste into telnet
@@ -80,14 +81,15 @@ where the `sys` command is available.
 1. Open `http://192.168.1.1` in a browser. Set a user password when prompted.
 2. Go to **System Tools > Backup & Restore**. Click **Backup** to download
    your config file (usually `conf.bin`).
-3. Place the downloaded file in the `firmware/` directory and run:
+3. Place the downloaded file in the `config/` directory and run:
 
-   ```shell
-   $ docker run --rm -v "$(pwd):/work" xz005g6-toolbox config /work/firmware/conf.bin
+   ```bash
+   docker run --rm -v "$(pwd):/work" xz005g6-toolbox config
    ```
 
-   This produces `output/admin_config.bin`.
-4. In the web UI, click **Restore** and select `admin_config.bin`. The modem
+   The container auto-discovers any `.bin` file in `config/`. This produces
+   `output/conf_admin.bin`.
+4. In the web UI, click **Restore** and select `conf_admin.bin`. The modem
    reboots.
 5. After reboot, visit `http://192.168.1.1/superadmin`. Set a superadmin
    password. Verify you can log in. This confirms the admin config is active.
@@ -108,19 +110,20 @@ to the modem's Ethernet port with a cable. Configure a static IP:
 
 #### 3b. Start the TFTP server (Terminal 2)
 
-```shell
-$ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
+```bash
+docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
 ```
 
 Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
+Press `Ctrl+C` when done.
 
 #### 3c. Telnet and run the commands (Terminal 1)
 
 Open `COMMANDS.txt` from the `output/` directory. It contains ready-to-paste
 `sys` commands with comments explaining what each does.
 
-```shell
-$ telnet 192.168.1.1
+```bash
+telnet 192.168.1.1
 ```
 
 At the `TP-Link(conf)#` prompt, paste each `sys` command in order:
@@ -183,12 +186,12 @@ Set `EXTRA_FLASH_COMMANDS` before running the build to inject additional
 `flash set` lines into the boot script. Use `&&` as separator (semicolons
 are rejected by the firmware). Examples:
 
-```shell
+```bash
 # Huawei OLT mode (from RTL960x community)
-$ EXTRA_FLASH_COMMANDS=flash set OMCI_OLT_MODE 1 && flash set OMCI_FAKE_OK 1
+EXTRA_FLASH_COMMANDS=flash set OMCI_OLT_MODE 1 && flash set OMCI_FAKE_OK 1
 
 # Full ONU identity clone
-$ EXTRA_FLASH_COMMANDS=flash set PON_VENDOR_ID HWTC && flash set GPON_ONU_MODEL HG8240H && flash set HW_HWVER BF9.A && flash set OMCI_SW_VER1 V3R017C10S100 && flash set OMCI_SW_VER2 V3R017C10S100
+EXTRA_FLASH_COMMANDS=flash set PON_VENDOR_ID HWTC && flash set GPON_ONU_MODEL HG8240H && flash set HW_HWVER BF9.A && flash set OMCI_SW_VER1 V3R017C10S100 && flash set OMCI_SW_VER2 V3R017C10S100
 ```
 
 Community-tested values: [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
@@ -258,4 +261,3 @@ bad flash from ever reaching reboot.
 ## License
 
 MIT
-
