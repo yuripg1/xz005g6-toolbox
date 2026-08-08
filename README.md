@@ -34,9 +34,10 @@ back to the v0.1.0 defaults:
    because `xmlconfig -def_mib` sets the value from compiled code before
    the XML is processed.
 
-2. **`DUAL_MGMT_MODE`**: changed from 0 to 1 in `config_default.xml`.
-   Restores the work-queue OMCI message processing mode. Unlike BDP,
-   this value has no compiled default, so the XML change alone is sufficient.
+2. **`DUAL_MGMT_MODE`**: changed from 0 to 1 in `config_default.xml` and
+   added to the boot script as `flash set DUAL_MGMT_MODE 1`. Ensures the
+   work-queue OMCI message processing mode is explicitly enforced on every
+   boot rather than relying on the XML default alone.
 
 3. **`pondetect`**: re-enabled in `runsdk.sh` (v0.2.0 commented it out).
    This daemon auto-detects the PON mode (GPON vs EPON) from the optical
@@ -204,24 +205,32 @@ All tunable values are in `.env`. Defaults work for Vivo Brazil Region 2.
 | `HOST_IP` | `192.168.1.2` | Your computer's IP during direct-connect flash. |
 | `TFTP_PORT` | `6969` | UDP port for TFTP transfer. |
 | `BDP_VALUE` | `136` | `OMCI_CUSTOM_BDP` value. 136 = v0.1.0 behavior. 138 adds kernel P-bit module. |
+| `DUAL_MGMT_VALUE` | `1` | `DUAL_MGMT_MODE` value enforced on every boot. |
 | `EXTRA_FLASH_COMMANDS` | *(empty)* | Additional `flash set` commands injected into boot script. Chain with `&&`. |
 | `TPCONF_COMMIT` | *(pinned)* | Git commit of `sta-c0000/tpconf_bin_xml` used for config encryption. |
 
-### Extra flash commands
+### Additional MIB tuning
 
-Set `EXTRA_FLASH_COMMANDS` before running the build to inject additional
-`flash set` lines into the boot script. Use `&&` as separator (semicolons
-are rejected by the firmware). Examples:
+`EXTRA_FLASH_COMMANDS` allows injecting arbitrary `flash set` commands into the
+boot script, enforcing them on every reboot. Use `&&` as separator (semicolons
+are rejected by the firmware).
 
-```bash
-# Huawei OLT mode (from RTL960x community)
-EXTRA_FLASH_COMMANDS=flash set OMCI_OLT_MODE 1 && flash set OMCI_FAKE_OK 1
+Some MIB keys that may be relevant for ISP compatibility:
 
-# Full ONU identity clone
-EXTRA_FLASH_COMMANDS=flash set PON_VENDOR_ID HWTC && flash set GPON_ONU_MODEL HG8240H && flash set HW_HWVER BF9.A && flash set OMCI_SW_VER1 V3R017C10S100 && flash set OMCI_SW_VER2 V3R017C10S100
-```
+| Key | Purpose |
+|-----|---------|
+| `OMCI_OLT_MODE` | OMCI compatibility profile (0=Default, 1=Huawei, 2=ZTE, 3=Custom, 21=Force Custom) |
+| `OMCI_FAKE_OK` | Acknowledge unsupported OMCI messages (1=enabled) |
+| `OMCC_VER` | OMCC protocol version advertised to OLT |
+| `OMCI_TM_OPT` | Traffic management profile |
+| `GPON_ONU_MODEL` | ONU model string reported through OMCI |
+| `HW_HWVER` | Hardware revision string |
+| `OMCI_SW_VER1` / `OMCI_SW_VER2` | Software version strings reported through OMCI |
 
-Community-tested values: [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
+Keys that can be set via the web UI (VLAN Mode, GPON SN, GPON Password, OLT
+Mode, Vendor ID) are not listed here — use the web interface for those.
+
+ISP-specific values are documented at [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
 
 ## How It Works
 
@@ -240,10 +249,10 @@ signature checks.
 ### Why the fix persists
 
 The boot script `/etc/scripts/config_xmlconfig.sh` runs `flash set` on every
-boot, writing the value to persistent MIB flash storage. By changing this from
-`flash set OMCI_CUSTOM_BDP 2` to `flash set OMCI_CUSTOM_BDP 136`, the correct
-value is re-applied on every boot regardless of what the OLT or any other
-process might change.
+boot, writing the values to persistent MIB flash storage. By changing these
+from the v0.2.0 defaults to the v0.1.0 values, the correct configuration is
+re-applied on every boot regardless of what the OLT or any other process
+might change.
 
 ### The `sys` command
 
@@ -285,3 +294,6 @@ prevent a bad flash from ever reaching reboot.
 - [sta-c0000/tpconf_bin_xml](https://github.com/sta-c0000/tpconf_bin_xml) —
   tool for decrypting and re-encrypting TP-Link config backup files.
 
+## License
+
+MIT

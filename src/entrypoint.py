@@ -35,7 +35,6 @@ def run(cmd, check=True):
 
 
 def find_bin(directory, label):
-    """Find the first .bin file in a directory."""
     bins = sorted(glob.glob(f'{directory}/*.bin'))
     if not bins:
         print(f"ERROR: No .bin file found in {directory}/")
@@ -54,6 +53,7 @@ def mode_build(firmware_path=None):
         sys.exit(1)
 
     bdp_value = os.environ.get('BDP_VALUE', '136')
+    dual_value = os.environ.get('DUAL_MGMT_VALUE', '1')
     extra = os.environ.get('EXTRA_FLASH_COMMANDS', '')
 
     print(f"=== Stage 1: Extract SquashFS from {os.path.basename(firmware_path)} ===")
@@ -79,26 +79,29 @@ def mode_build(firmware_path=None):
     run(f'unsquashfs -d {ROOTFS_DIR} "{sq_path}"')
 
     print("\n=== Stage 3: Patch files ===")
-    # 3a. config_xmlconfig.sh
+    # 3a. config_xmlconfig.sh — replace the flash set line, add DUAL_MGMT_MODE and extras
     script_path = f'{ROOTFS_DIR}/etc/scripts/config_xmlconfig.sh'
     with open(script_path, 'r') as f:
         content = f.read()
-    content = content.replace(
-        'flash set OMCI_CUSTOM_BDP 2',
-        f'flash set OMCI_CUSTOM_BDP {bdp_value}'
-    )
-    content = content.replace(
-        'echo "Set OMCI_CUSTOM_BDP 2"',
-        f'echo "Set OMCI_CUSTOM_BDP {bdp_value}"'
-    )
+
+    # Build the replacement block
+    lines = []
+    lines.append(f'flash set OMCI_CUSTOM_BDP {bdp_value}')
+    lines.append(f'echo "Set OMCI_CUSTOM_BDP {bdp_value}"')
+    lines.append(f'flash set DUAL_MGMT_MODE {dual_value}')
+    lines.append(f'echo "Set DUAL_MGMT_MODE {dual_value}"')
     if extra:
-        old = f'echo "Set OMCI_CUSTOM_BDP {bdp_value}"'
-        new = f'{old}\n\t\t\t\t{extra}'
-        content = content.replace(old, new)
+        lines.append(extra)
+
+    replacement = '\n\t\t\t\t'.join(lines)
+    content = content.replace(
+        'flash set OMCI_CUSTOM_BDP 2\n\t\t\t\techo "Set OMCI_CUSTOM_BDP 2"',
+        replacement
+    )
 
     with open(script_path, 'w') as f:
         f.write(content)
-    run(f'grep -n "OMCI_CUSTOM_BDP" {script_path}')
+    run(f'grep -n "OMCI_CUSTOM_BDP\|DUAL_MGMT_MODE" {script_path}')
 
     # 3b. config_default.xml (ROT-1 encoded)
     xml_path = f'{ROOTFS_DIR}/etc/config_default.xml'
@@ -111,12 +114,12 @@ def mode_build(firmware_path=None):
     )
     decoded = decoded.replace(
         'DUAL_MGMT_MODE" Value="0"',
-        'DUAL_MGMT_MODE" Value="1"'
+        f'DUAL_MGMT_MODE" Value="{dual_value}"'
     )
     reencoded = bytes((b + 1) & 0xFF for b in decoded.encode('utf-8'))
     with open(xml_path, 'wb') as f:
         f.write(reencoded)
-    print(f"  config_default.xml: BDP={bdp_value}, DUAL_MGMT_MODE=1")
+    print(f"  config_default.xml: BDP={bdp_value}, DUAL_MGMT_MODE={dual_value}")
 
     # 3c. runsdk.sh
     sdk_path = f'{ROOTFS_DIR}/etc/runsdk.sh'
