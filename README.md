@@ -215,11 +215,19 @@ All tunable values are in `.env`. Defaults work for Vivo Brazil Region 2.
 boot script, enforcing them on every reboot. Use `&&` as separator (semicolons
 are rejected by the firmware).
 
-Some MIB keys that may be relevant for ISP compatibility:
+```bash
+# Single command:
+EXTRA_FLASH_COMMANDS=flash set SOME_KEY some_value
+
+# Multiple commands:
+EXTRA_FLASH_COMMANDS=flash set KEY_ONE value_one && flash set KEY_TWO value_two
+```
+
+Some MIB keys that may be relevant for ISP compatibility (keys already settable
+via the web UI are omitted — use the web interface for those):
 
 | Key | Purpose |
 |-----|---------|
-| `OMCI_OLT_MODE` | OMCI compatibility profile (0=Default, 1=Huawei, 2=ZTE, 3=Custom, 21=Force Custom) |
 | `OMCI_FAKE_OK` | Acknowledge unsupported OMCI messages (1=enabled) |
 | `OMCC_VER` | OMCC protocol version advertised to OLT |
 | `OMCI_TM_OPT` | Traffic management profile |
@@ -227,10 +235,8 @@ Some MIB keys that may be relevant for ISP compatibility:
 | `HW_HWVER` | Hardware revision string |
 | `OMCI_SW_VER1` / `OMCI_SW_VER2` | Software version strings reported through OMCI |
 
-Keys that can be set via the web UI (VLAN Mode, GPON SN, GPON Password, OLT
-Mode, Vendor ID) are not listed here — use the web interface for those.
-
 ISP-specific values are documented at [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
+
 
 ## How It Works
 
