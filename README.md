@@ -285,6 +285,3 @@ prevent a bad flash from ever reaching reboot.
 - [sta-c0000/tpconf_bin_xml](https://github.com/sta-c0000/tpconf_bin_xml) —
   tool for decrypting and re-encrypting TP-Link config backup files.
 
-## License
-
-MIT
