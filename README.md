@@ -108,13 +108,14 @@ and paste each `sys` command in order.
 #### Before you start
 
 - **The `sys` command is only available for 10 minutes after boot.**
-  The full sequence takes about 2 minutes. If you exceed the window,
-  reboot the modem and start again. The `check_uptime` command at the
-  start of Stage 3c shows how many seconds remain.
-- **The erase→write→verify sequence takes about 5 seconds.** Once you
-  run `erase`, the rootfs partition is wiped. You MUST complete `write`
-  and `verify` without interruption. Ensure stable power. Do not reboot
-  until `verify` shows success.
+  The full sequence takes a few minutes. If you exceed the window,
+  reboot the modem and start again.
+- **Before the critical section, a `check_uptime` command shows how many
+  seconds have elapsed since boot.** If the first number is above ~300
+  (5 minutes), reboot to get a fresh window.
+- **The critical section (erase→write→verify) must not be interrupted.**
+  Once you run `erase`, the rootfs partition is wiped. You MUST complete
+  `write` and `verify` before rebooting. Ensure stable power.
 - **The first `sys` command after boot always fails silently** due to a
   key state machine in the CLI. The `warmup` command exists solely to
   consume this state — paste it first.
@@ -153,17 +154,17 @@ Paste each `sys` command from the **STAGE 3c** section in order.
 | Step | What it does | Expected output |
 |------|-------------|-----------------|
 | `warmup` | Consumes first-command key state | (silent) |
-| `check_uptime` | Shows seconds since boot | e.g. `186.42 806.11` — first number under ~500 is safe |
-| `tftp_get` | Downloads patched SquashFS via TFTP | Takes 5–15s. Echoes the command. |
+| `tftp_get` | Downloads patched SquashFS via TFTP | Echoes the command, then transfers |
 | `check_size` | Verifies file size | `-rw-r--r-- ... 2408448 ...` |
 | `check_md5` | Verifies file integrity | MD5 must match the one printed during Stage 1 build |
-| `backup` | Saves current rootfs to /tmp (optional) | Echoes the command. |
-| ══════ | **CRITICAL SECTION BELOW — DO NOT INTERRUPT** | ══════ |
+| `backup` | Saves current rootfs to /tmp (optional) | Echoes the command |
+| `check_uptime` | **Check time remaining before critical section** | e.g. `186.42 806.11` — first number under ~300 is safe |
+| ══════ | **CRITICAL SECTION — DO NOT INTERRUPT** | ══════ |
 | `erase` | Erases the rootfs flash partition | `Erasing ... 99%` |
-| `write` | Writes patched SquashFS | Takes 2–3s. Echoes the command. |
+| `write` | Writes patched SquashFS | Echoes the command, then writes |
 | `verify` | Byte-by-byte comparison | **Must show:** `cmp: EOF on /tmp/new.squashfs` |
-| ══════ | **CRITICAL SECTION ABOVE** | ══════ |
-| `reboot` | Reboots the modem | Telnet disconnects. |
+| ══════ | **END CRITICAL SECTION** | ══════ |
+| `reboot` | Reboots the modem | Telnet disconnects |
 
 **If `verify` shows anything other than `EOF on /tmp/new.squashfs`:**
 the write was corrupted. Run `erase` and `write` again. Do NOT reboot until

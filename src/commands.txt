@@ -4,17 +4,13 @@
 # Each command prints its own plaintext before executing.
 # Paste them in order at the TP-Link(conf)# prompt.
 #
-# CRITICAL: The sys command is only available for 10 minutes
-# after boot. Run check_uptime first. If the first number is
-# above ~500, reboot the modem and start again.
+# The sys command is only available for 10 minutes after boot.
+# The full sequence takes a few minutes.
 # ============================================================
 
 warmup      | linuxsh
 
-# --- Check remaining time ---
-check_uptime| linuxsh echo 'cat /proc/uptime' && cat /proc/uptime
-
-# --- Download patched SquashFS via TFTP (5–15 seconds) ---
+# --- Download patched SquashFS via TFTP ---
 tftp_get    | linuxsh echo 'tftp -g -l /tmp/new.squashfs -r patched_rootfs.squashfs __HOST_IP__ __TFTP_PORT__' && tftp -g -l /tmp/new.squashfs -r patched_rootfs.squashfs __HOST_IP__ __TFTP_PORT__
 
 # --- Verify the downloaded file ---
@@ -26,11 +22,19 @@ backup      | linuxsh echo 'cat /dev/mtd5 > /tmp/old_rootfs_backup.squashfs' && 
 backup_ok   | linuxsh echo 'ls -la /tmp/old_rootfs_backup.squashfs' && ls -la /tmp/old_rootfs_backup.squashfs
 
 # ============================================================
+# CHECK REMAINING TIME BEFORE PROCEEDING
+# ============================================================
+# The erase→write→verify sequence must not be interrupted.
+# If uptime is above ~300 seconds (5 min), reboot and restart.
+
+check_uptime| linuxsh echo 'cat /proc/uptime' && cat /proc/uptime
+
+# ============================================================
 # CRITICAL SECTION — DO NOT INTERRUPT
 # ============================================================
 # Once you run 'erase', the rootfs partition is wiped.
-# You MUST complete 'write' and 'verify' without interruption.
-# Total time: ~5 seconds. Ensure stable power.
+# You MUST complete 'write' and 'verify' before rebooting.
+# Ensure stable power.
 # ============================================================
 
 erase       | linuxsh echo 'flash_eraseall /dev/mtd5' && flash_eraseall /dev/mtd5
