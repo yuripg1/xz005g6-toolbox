@@ -56,13 +56,14 @@ web UI upgrade path.
 - Docker (Linux, macOS, or Windows with WSL2/Docker Desktop)
 - The firmware file `XZ005-G6v1_0.2.0_3.0.0_UP_BOOT(250711)_2025-07-13_18.25.08.bin`
   (obtain from TP-Link's support website for your region)
-- An Ethernet cable to connect your computer directly to the modem
-- Internet access during Stage 1 only (for Docker build and Git clone)
+- An Ethernet cable
+- Internet access during Stage 1 only (for the Docker build)
 
 ### Stage 1 — Build the Patched SquashFS
 
-**Internet required.** Place the firmware `.bin` file in the `firmware/`
-directory, then run:
+**Internet required — do this before connecting to the modem.**
+
+Place the firmware `.bin` file in the `firmware/` directory, then run:
 
 ```shell
 $ docker build --build-arg TPCONF_COMMIT=$(grep TPCONF_COMMIT .env | cut -d= -f2) -t xz005g6-toolbox .
@@ -77,15 +78,23 @@ two files in `output/`:
 
 ### Stage 2 — Enable Admin Access
 
-**Direct connection to modem.** The telnet CLI requires `AdminEnable=1` to
-reach the `TP-Link(conf)#` prompt where the `sys` command is available.
+**Disconnect from the internet. Connect your computer directly to the modem
+with a static IP.** The modem has no DHCP server:
 
-1. Connect your computer directly to the modem's Ethernet port.
-2. Open `http://192.168.1.1` in a browser. Set a user password when prompted.
-3. Go to **System Tools > Backup & Restore**. Click **Backup** to download
+- **Linux**: `sudo ip addr add 192.168.1.2/24 dev eth0`
+- **macOS**: System Settings > Network > Ethernet > Configure IPv4 >
+  Manually, set `192.168.1.2`, subnet `255.255.255.0`
+- **Windows**: Control Panel > Network and Sharing Center > Change adapter
+  settings > Right-click Ethernet > Properties > IPv4 > Use `192.168.1.2`,
+  mask `255.255.255.0`
+
+The telnet CLI requires `AdminEnable=1` to reach the `TP-Link(conf)#` prompt
+where the `sys` command is available.
+
+1. Open `http://192.168.1.1` in a browser. Set a user password when prompted.
+2. Go to **System Tools > Backup & Restore**. Click **Backup** to download
    your config file (usually `conf.bin`).
-4. Place the downloaded file in the `config/` directory.
-5. Reconnect your computer to the internet and run:
+3. Place the downloaded file in the `config/` directory and run:
 
    ```shell
    $ docker run --rm -v "$(pwd):/work" xz005g6-toolbox config
@@ -93,16 +102,16 @@ reach the `TP-Link(conf)#` prompt where the `sys` command is available.
 
    The container auto-discovers any `.bin` file in `config/`. This produces
    `output/conf_admin.bin`.
-6. Reconnect to the modem directly. In the web UI, click **Restore** and
-   select `conf_admin.bin`. The modem reboots.
-7. After reboot, visit `http://192.168.1.1/superadmin`. Set a superadmin
+4. In the web UI, click **Restore** and select `conf_admin.bin`. The modem
+   reboots.
+5. After reboot, visit `http://192.168.1.1/superadmin`. Set a superadmin
    password. Verify you can log in.
 
 ### Stage 3 — Flash the Fix
 
-**Direct connection to modem.** You will paste commands from `COMMANDS.txt`
-into a telnet session. The file is self-contained — read it top to bottom
-and paste each `sys` command in order.
+**Stay connected directly to the modem.** You will paste commands from
+`COMMANDS.txt` into a telnet session. The file is self-contained — read
+it top to bottom and paste each `sys` command in order.
 
 #### Before you start
 
@@ -110,8 +119,8 @@ and paste each `sys` command in order.
   The full sequence takes a few minutes. If you exceed the window,
   reboot the modem and start again.
 - **Before the critical section, a `check_uptime` command shows how many
-  seconds have elapsed since boot.** If the first number is above ~300
-  (5 minutes), reboot to get a fresh window.
+  seconds have elapsed since boot.** The first number is the uptime. If
+  it is above ~300 (5 minutes), reboot to get a fresh window.
 - **The critical section (erase→write→verify) must not be interrupted.**
   Once you run `erase`, the rootfs partition is wiped. You MUST complete
   `write` and `verify` before rebooting. Ensure stable power.
@@ -119,19 +128,7 @@ and paste each `sys` command in order.
   key state machine in the CLI. The `warmup` command exists solely to
   consume this state — paste it first.
 
-#### 3a. Prepare the direct connection
-
-Connect your computer directly to the modem's Ethernet port. Configure a
-static IP on your computer:
-
-- **Linux**: `sudo ip addr add 192.168.1.2/24 dev eth0`
-- **macOS**: System Settings > Network > Ethernet > Configure IPv4 > Manually,
-  set IP `192.168.1.2`, subnet `255.255.255.0`
-- **Windows**: Control Panel > Network and Sharing Center > Change adapter
-  settings > Right-click Ethernet > Properties > IPv4 > Use the following IP
-  address: `192.168.1.2`, mask `255.255.255.0`
-
-#### 3b. Start the TFTP server (Terminal 2)
+#### 3a. Start the TFTP server (Terminal 2)
 
 ```shell
 $ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
@@ -140,7 +137,7 @@ $ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
 Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
 Press `Ctrl+C` when done.
 
-#### 3c. Flash the fix (Terminal 1)
+#### 3b. Flash the fix (Terminal 1)
 
 Open `COMMANDS.txt`. Telnet to the modem:
 
@@ -169,7 +166,7 @@ Paste each `sys` command from the **STAGE 3c** section in order.
 the write was corrupted. Run `erase` and `write` again. Do NOT reboot until
 `verify` passes.
 
-#### 3d. Verify the fix (Terminal 1)
+#### 3c. Verify the fix (Terminal 1)
 
 Wait 30–60 seconds after reboot, then telnet back in:
 
@@ -209,9 +206,9 @@ All tunable values are in `.env`. Defaults work for Vivo Brazil Region 2.
 
 ### Additional MIB tuning
 
-`EXTRA_FLASH_COMMANDS` allows injecting arbitrary `flash set` commands into the
-boot script, enforcing them on every reboot. Use `&&` as separator (semicolons
-are rejected by the firmware).
+`EXTRA_FLASH_COMMANDS` allows injecting arbitrary `flash set` commands into
+the boot script, enforcing them on every reboot. Use `&&` as separator
+(semicolons are rejected by the firmware).
 
 ```
 # Single command:
@@ -221,8 +218,8 @@ EXTRA_FLASH_COMMANDS="flash set SOME_KEY some_value"
 EXTRA_FLASH_COMMANDS="flash set KEY_ONE value_one && flash set KEY_TWO value_two"
 ```
 
-Some MIB keys that may be relevant for ISP compatibility (keys already settable
-via the web UI are omitted — use the web interface for those):
+Some MIB keys that may be relevant for ISP compatibility (keys already
+settable via the web UI are omitted — use the web interface for those):
 
 | Key | Purpose |
 |-----|---------|
@@ -234,7 +231,6 @@ via the web UI are omitted — use the web interface for those):
 | `OMCI_SW_VER1` / `OMCI_SW_VER2` | Software version strings reported through OMCI |
 
 ISP-specific values are documented at [Anime4000/RTL960x](https://github.com/Anime4000/RTL960x).
-
 
 ## How It Works
 
