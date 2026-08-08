@@ -64,11 +64,9 @@ web UI upgrade path.
 **Internet required.** Place the firmware `.bin` file in the `firmware/`
 directory, then run:
 
-```bash
-docker build \
-  --build-arg TPCONF_COMMIT=$(grep TPCONF_COMMIT .env | cut -d= -f2) \
-  -t xz005g6-toolbox .
-docker run --rm -v "$(pwd):/work" xz005g6-toolbox build
+```shell
+$ docker build --build-arg TPCONF_COMMIT=$(grep TPCONF_COMMIT .env | cut -d= -f2) -t xz005g6-toolbox .
+$ docker run --rm -v "$(pwd):/work" xz005g6-toolbox build
 ```
 
 The container auto-discovers any `.bin` file in `firmware/`. This produces
@@ -89,8 +87,8 @@ reach the `TP-Link(conf)#` prompt where the `sys` command is available.
 4. Place the downloaded file in the `config/` directory.
 5. Reconnect your computer to the internet and run:
 
-   ```bash
-   docker run --rm -v "$(pwd):/work" xz005g6-toolbox config
+   ```shell
+   $ docker run --rm -v "$(pwd):/work" xz005g6-toolbox config
    ```
 
    The container auto-discovers any `.bin` file in `config/`. This produces
@@ -135,8 +133,8 @@ static IP on your computer:
 
 #### 3b. Start the TFTP server (Terminal 2)
 
-```bash
-docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
+```shell
+$ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
 ```
 
 Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
@@ -146,8 +144,8 @@ Press `Ctrl+C` when done.
 
 Open `COMMANDS.txt`. Telnet to the modem:
 
-```bash
-telnet 192.168.1.1
+```shell
+$ telnet 192.168.1.1
 ```
 
 Paste each `sys` command from the **STAGE 3c** section in order.
@@ -175,8 +173,8 @@ the write was corrupted. Run `erase` and `write` again. Do NOT reboot until
 
 Wait 30–60 seconds after reboot, then telnet back in:
 
-```bash
-telnet 192.168.1.1
+```shell
+$ telnet 192.168.1.1
 ```
 
 Paste each `sys` command from the **STAGE 3d** section in order.
@@ -215,12 +213,12 @@ All tunable values are in `.env`. Defaults work for Vivo Brazil Region 2.
 boot script, enforcing them on every reboot. Use `&&` as separator (semicolons
 are rejected by the firmware).
 
-```bash
+```
 # Single command:
-EXTRA_FLASH_COMMANDS=flash set SOME_KEY some_value
+EXTRA_FLASH_COMMANDS="flash set SOME_KEY some_value"
 
 # Multiple commands:
-EXTRA_FLASH_COMMANDS=flash set KEY_ONE value_one && flash set KEY_TWO value_two
+EXTRA_FLASH_COMMANDS="flash set KEY_ONE value_one && flash set KEY_TWO value_two"
 ```
 
 Some MIB keys that may be relevant for ISP compatibility (keys already settable
@@ -300,6 +298,3 @@ prevent a bad flash from ever reaching reboot.
 - [sta-c0000/tpconf_bin_xml](https://github.com/sta-c0000/tpconf_bin_xml) —
   tool for decrypting and re-encrypting TP-Link config backup files.
 
-## License
-
-MIT
