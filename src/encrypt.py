@@ -2,6 +2,7 @@
 """
 Read plaintext sys commands and encrypt them for the device.
 Outputs COMMANDS.txt ready to paste into telnet.
+Comment lines (starting with #) and blank lines are passed through.
 """
 
 import base64
@@ -47,14 +48,17 @@ def main():
         out.write(f"# Generated for ProductID={product_id}\n\n")
 
         for line in lines:
-            line = line.strip()
-            if not line or line.startswith('#'):
+            stripped = line.strip()
+
+            # Pass through blank lines and comment-only lines
+            if not stripped or stripped.startswith('#'):
+                out.write(line)
                 continue
 
-            if '|' not in line:
+            if '|' not in stripped:
                 continue
 
-            label, cmd = line.split('|', 1)
+            label, cmd = stripped.split('|', 1)
             label = label.strip()
             cmd = cmd.strip()
 
@@ -63,7 +67,7 @@ def main():
 
             encrypted = encrypt(cmd, derived_key)
 
-            out.write(f"# {label}: {cmd}\n")
+            out.write(f"# {label}\n")
             out.write(f"sys {encrypted}\n\n")
 
     print(f"Wrote {output_file}")
@@ -71,4 +75,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

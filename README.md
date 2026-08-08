@@ -1,8 +1,8 @@
 # XZ005-G6 Toolbox
 
 Permanently fix the TP-Link XZ005-G6 GPON ONU (Realtek RTL9602C) so it passes
-data with ISPs whose OLTs do not send complete OMCI VLAN provisioning — most
-notably Vivo Brazil (Huawei OLT, Region 2).
+data with ISPs whose OLTs do not send complete OMCI VLAN provisioning —
+most notably Vivo Brazil (Huawei OLT, Region 2).
 
 Tested with firmware version `0.2.0 3.0.0 v6066.0 Build 250711 Rel.74023n`,
 restoring the behavior of `0.1.0 3.0.0 v6066.0 Build 231212 Rel.36338n`.
@@ -56,11 +56,12 @@ web UI upgrade path.
 - The firmware file `XZ005-G6v1_0.2.0_3.0.0_UP_BOOT(250711)_2025-07-13_18.25.08.bin`
   (obtain from TP-Link's support website for your region)
 - An Ethernet cable to connect your computer directly to the modem
-- Internet access during Stages 1–2 (for Docker build and Git clone)
+- Internet access during Stage 1 only (for Docker build and Git clone)
 
 ### Stage 1 — Build the Patched SquashFS
 
-Place the firmware `.bin` file in the `firmware/` directory, then run:
+**Internet required.** Place the firmware `.bin` file in the `firmware/`
+directory, then run:
 
 ```bash
 docker build \
@@ -77,13 +78,15 @@ two files in `output/`:
 
 ### Stage 2 — Enable Admin Access
 
-The telnet CLI requires `AdminEnable=1` to reach the `TP-Link(conf)#` prompt
-where the `sys` command is available.
+**Direct connection to modem.** The telnet CLI requires `AdminEnable=1` to
+reach the `TP-Link(conf)#` prompt where the `sys` command is available.
 
-1. Open `http://192.168.1.1` in a browser. Set a user password when prompted.
-2. Go to **System Tools > Backup & Restore**. Click **Backup** to download
+1. Connect your computer directly to the modem's Ethernet port.
+2. Open `http://192.168.1.1` in a browser. Set a user password when prompted.
+3. Go to **System Tools > Backup & Restore**. Click **Backup** to download
    your config file (usually `conf.bin`).
-3. Place the downloaded file in the `config/` directory and run:
+4. Place the downloaded file in the `config/` directory.
+5. Reconnect your computer to the internet and run:
 
    ```bash
    docker run --rm -v "$(pwd):/work" xz005g6-toolbox config
@@ -91,17 +94,35 @@ where the `sys` command is available.
 
    The container auto-discovers any `.bin` file in `config/`. This produces
    `output/conf_admin.bin`.
-4. In the web UI, click **Restore** and select `conf_admin.bin`. The modem
-   reboots.
-5. After reboot, visit `http://192.168.1.1/superadmin`. Set a superadmin
-   password. Verify you can log in. This confirms the admin config is active.
+6. Reconnect to the modem directly. In the web UI, click **Restore** and
+   select `conf_admin.bin`. The modem reboots.
+7. After reboot, visit `http://192.168.1.1/superadmin`. Set a superadmin
+   password. Verify you can log in.
 
 ### Stage 3 — Flash the Fix
 
+**Direct connection to modem.** You will paste commands from `COMMANDS.txt`
+into a telnet session. The file is self-contained — read it top to bottom
+and paste each `sys` command in order.
+
+#### Before you start
+
+- **The `sys` command is only available for 10 minutes after boot.**
+  The full sequence takes about 2 minutes. If you exceed the window,
+  reboot the modem and start again. The `check_uptime` command at the
+  start of Stage 3c shows how many seconds remain.
+- **The erase→write→verify sequence takes about 5 seconds.** Once you
+  run `erase`, the rootfs partition is wiped. You MUST complete `write`
+  and `verify` without interruption. Ensure stable power. Do not reboot
+  until `verify` shows success.
+- **The first `sys` command after boot always fails silently** due to a
+  key state machine in the CLI. The `warmup` command exists solely to
+  consume this state — paste it first.
+
 #### 3a. Prepare the direct connection
 
-Disconnect your computer from your home network. Connect the computer directly
-to the modem's Ethernet port with a cable. Configure a static IP:
+Connect your computer directly to the modem's Ethernet port. Configure a
+static IP on your computer:
 
 - **Linux**: `sudo ip addr add 192.168.1.2/24 dev eth0`
 - **macOS**: System Settings > Network > Ethernet > Configure IPv4 > Manually,
@@ -119,48 +140,51 @@ docker run --rm -p 6969:6969/udp -v "$(pwd):/work" xz005g6-toolbox serve
 Leave this running. It serves `output/patched_rootfs.squashfs` to the modem.
 Press `Ctrl+C` when done.
 
-#### 3c. Telnet and run the commands (Terminal 1)
+#### 3c. Flash the fix (Terminal 1)
 
-Open `COMMANDS.txt` from the `output/` directory. It contains ready-to-paste
-`sys` commands with comments explaining what each does.
+Open `COMMANDS.txt`. Telnet to the modem:
 
 ```bash
 telnet 192.168.1.1
 ```
 
-At the `TP-Link(conf)#` prompt, paste each `sys` command in order:
+Paste each `sys` command from the **STAGE 3c** section in order.
 
 | Step | What it does | Expected output |
 |------|-------------|-----------------|
-| `warmup` | Initializes encryption state | (silent) |
-| `tftp_get` | Downloads patched SquashFS to `/tmp` | (silent — takes 5–15s) |
-| `check_size` | Verifies file size is 2408448 | `-rw-r--r-- ... 2408448 ...` |
-| `check_md5` | Verifies file integrity | MD5 must match build output |
-| `backup` | Saves current rootfs (optional) | (silent) |
-| `erase` | Erases the flash partition | `Erasing ... 99%` |
-| `write` | Writes patched SquashFS | (silent — takes 2–3s) |
-| `verify` | Byte-by-byte comparison | `cmp: EOF on /tmp/new.squashfs` |
-| `reboot` | Reboots the modem | (telnet disconnects) |
+| `warmup` | Consumes first-command key state | (silent) |
+| `check_uptime` | Shows seconds since boot | e.g. `186.42 806.11` — first number under ~500 is safe |
+| `tftp_get` | Downloads patched SquashFS via TFTP | Takes 5–15s. Echoes the command. |
+| `check_size` | Verifies file size | `-rw-r--r-- ... 2408448 ...` |
+| `check_md5` | Verifies file integrity | MD5 must match the one printed during Stage 1 build |
+| `backup` | Saves current rootfs to /tmp (optional) | Echoes the command. |
+| ══════ | **CRITICAL SECTION BELOW — DO NOT INTERRUPT** | ══════ |
+| `erase` | Erases the rootfs flash partition | `Erasing ... 99%` |
+| `write` | Writes patched SquashFS | Takes 2–3s. Echoes the command. |
+| `verify` | Byte-by-byte comparison | **Must show:** `cmp: EOF on /tmp/new.squashfs` |
+| ══════ | **CRITICAL SECTION ABOVE** | ══════ |
+| `reboot` | Reboots the modem | Telnet disconnects. |
 
-**Important**: The `sys` command is only available for 10 minutes after boot.
-The sequence above takes about 2 minutes. If you exceed the window, reboot the
-modem and start again.
+**If `verify` shows anything other than `EOF on /tmp/new.squashfs`:**
+the write was corrupted. Run `erase` and `write` again. Do NOT reboot until
+`verify` passes.
 
-**Critical**: Do not reboot until `verify` shows `EOF on /tmp/new.squashfs`.
-This message means every byte matches — the flash is bit-perfect. If you see
-`differ: char N` instead, go back to `erase` and `write` and try again.
-
-#### 3d. Verify the fix
+#### 3d. Verify the fix (Terminal 1)
 
 Wait 30–60 seconds after reboot, then telnet back in:
 
-```
+```bash
 telnet 192.168.1.1
-sys nF0fadtl3r4=
-sys <check_bdp>     # should show BDP: 0x00000088
-sys <check_omci>    # should show OMCI_CUSTOM_BDP=136
-sys <check_dual>    # should show DUAL_MGMT_MODE=1
 ```
+
+Paste each `sys` command from the **STAGE 3d** section in order.
+
+| Step | Expected output |
+|------|-----------------|
+| `warmup` | (silent) |
+| `check_bdp` | `BDP: 0x00000088` |
+| `check_omci` | `OMCI_CUSTOM_BDP=136` |
+| `check_dual` | `DUAL_MGMT_MODE=1` |
 
 Connect your router. PPPoE should connect and internet should work within
 30–60 seconds of the modem reaching O5.
@@ -236,21 +260,21 @@ detected and rejected by the firmware's `util_execSystem` function.
 
 The first `sys` command after boot always fails silently because the CLI uses
 the raw base key for the first command and the ProductID-derived key for
-subsequent commands. The `warmup` command (`sys nF0fadtl3r4=`) exists solely
-to consume this first-command state — it is encrypted with the derived key
-and fails decryption with the base key, but the act of processing it advances
-the state so all subsequent commands work normally.
+subsequent commands. The `warmup` command exists solely to consume this
+first-command state — it is encrypted with the derived key and fails
+decryption with the base key, but the act of processing it advances the
+state so all subsequent commands work normally.
 
 ## Safety
 
-The device runs from an **in-memory copy** of the root filesystem. Erasing and
-rewriting `/dev/mtd5` does not affect the running system. If the `verify` step
-shows any corruption, re-erase and re-write as many times as needed. Only the
-`reboot` command commits the change.
+The device runs from an **in-memory copy** of the root filesystem. Erasing
+and rewriting `/dev/mtd5` does not affect the running system. If the `verify`
+step shows any corruption, re-erase and re-write as many times as needed.
+Only the `reboot` command commits the change.
 
-If the device does not boot after flashing, recovery without serial/UART access
-is difficult. The `verify` step using `cmp` exists specifically to prevent a
-bad flash from ever reaching reboot.
+If the device does not boot after flashing, recovery without serial/UART
+access is difficult. The `verify` step using `cmp` exists specifically to
+prevent a bad flash from ever reaching reboot.
 
 ## Credits
 
@@ -260,3 +284,6 @@ bad flash from ever reaching reboot.
 - [sta-c0000/tpconf_bin_xml](https://github.com/sta-c0000/tpconf_bin_xml) —
   tool for decrypting and re-encrypting TP-Link config backup files.
 
+## License
+
+MIT

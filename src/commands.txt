@@ -1,18 +1,71 @@
-# Plaintext sys commands. One per line. Format: LABEL | COMMAND
-# Lines starting with # are ignored. Blank lines are ignored.
-# The 'warmup' command MUST come first — it consumes the first-command key state.
+# ============================================================
+# STAGE 3c — FLASH THE FIX
+# ============================================================
+# Each command prints its own plaintext before executing.
+# Paste them in order at the TP-Link(conf)# prompt.
+#
+# CRITICAL: The sys command is only available for 10 minutes
+# after boot. Run check_uptime first. If the first number is
+# above ~500, reboot the modem and start again.
+# ============================================================
 
-warmup     | linuxsh
-tftp_get   | linuxsh tftp -g -l /tmp/new.squashfs -r patched_rootfs.squashfs __HOST_IP__ __TFTP_PORT__
-check_size | linuxsh ls -la /tmp/new.squashfs
-check_md5  | linuxsh md5sum /tmp/new.squashfs
-backup     | linuxsh cat /dev/mtd5 > /tmp/old_rootfs_backup.squashfs
-backup_ok  | linuxsh ls -la /tmp/old_rootfs_backup.squashfs
-erase      | linuxsh flash_eraseall /dev/mtd5
-write      | linuxsh cat /tmp/new.squashfs > /dev/mtd5
-verify     | linuxsh cmp /tmp/new.squashfs /dev/mtd5
-reboot     | linuxsh reboot
-check_bdp  | linuxsh omcicli get cflag
-check_omci | linuxsh flash get OMCI_CUSTOM_BDP
-check_dual | linuxsh flash get DUAL_MGMT_MODE
+warmup      | linuxsh
 
+# --- Check remaining time ---
+check_uptime| linuxsh echo 'cat /proc/uptime' && cat /proc/uptime
+
+# --- Download patched SquashFS via TFTP (5–15 seconds) ---
+tftp_get    | linuxsh echo 'tftp -g -l /tmp/new.squashfs -r patched_rootfs.squashfs __HOST_IP__ __TFTP_PORT__' && tftp -g -l /tmp/new.squashfs -r patched_rootfs.squashfs __HOST_IP__ __TFTP_PORT__
+
+# --- Verify the downloaded file ---
+check_size  | linuxsh echo 'ls -la /tmp/new.squashfs' && ls -la /tmp/new.squashfs
+check_md5   | linuxsh echo 'md5sum /tmp/new.squashfs' && md5sum /tmp/new.squashfs
+
+# --- Backup current rootfs (optional) ---
+backup      | linuxsh echo 'cat /dev/mtd5 > /tmp/old_rootfs_backup.squashfs' && cat /dev/mtd5 > /tmp/old_rootfs_backup.squashfs
+backup_ok   | linuxsh echo 'ls -la /tmp/old_rootfs_backup.squashfs' && ls -la /tmp/old_rootfs_backup.squashfs
+
+# ============================================================
+# CRITICAL SECTION — DO NOT INTERRUPT
+# ============================================================
+# Once you run 'erase', the rootfs partition is wiped.
+# You MUST complete 'write' and 'verify' without interruption.
+# Total time: ~5 seconds. Ensure stable power.
+# ============================================================
+
+erase       | linuxsh echo 'flash_eraseall /dev/mtd5' && flash_eraseall /dev/mtd5
+write       | linuxsh echo 'cat /tmp/new.squashfs > /dev/mtd5' && cat /tmp/new.squashfs > /dev/mtd5
+verify      | linuxsh echo 'cmp /tmp/new.squashfs /dev/mtd5' && cmp /tmp/new.squashfs /dev/mtd5
+
+# ============================================================
+# EXPECTED OUTPUT FROM verify:
+#   cmp: EOF on /tmp/new.squashfs
+# This means SUCCESS — every byte matches.
+# If you see "differ: char N" instead, go back to 'erase'.
+# ============================================================
+
+reboot      | linuxsh echo 'reboot' && reboot
+
+
+# ============================================================
+# STAGE 3d — VERIFY THE FIX
+# ============================================================
+# After reboot (wait 30–60 seconds), telnet back in.
+# Paste the warmup first, then these commands.
+
+warmup      | linuxsh
+
+# --- Check the fix survived ---
+check_bdp   | linuxsh echo 'omcicli get cflag' && omcicli get cflag
+check_omci  | linuxsh echo 'flash get OMCI_CUSTOM_BDP' && flash get OMCI_CUSTOM_BDP
+check_dual  | linuxsh echo 'flash get DUAL_MGMT_MODE' && flash get DUAL_MGMT_MODE
+
+# ============================================================
+# EXPECTED OUTPUT:
+#   BDP: 0x00000088
+#   OMCI_CUSTOM_BDP=136
+#   DUAL_MGMT_MODE=1
+#
+# Connect your router. Internet should work within 30–60 seconds.
+# The fix is permanent.
+# ============================================================
