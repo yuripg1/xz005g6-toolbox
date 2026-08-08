@@ -63,7 +63,9 @@ web UI upgrade path.
 Place the firmware `.bin` file in the `firmware/` directory, then run:
 
 ```bash
-docker build -t xz005g6-toolbox .
+docker build \
+  --build-arg TPCONF_COMMIT=$(grep TPCONF_COMMIT .env | cut -d= -f2) \
+  -t xz005g6-toolbox .
 docker run --rm -v "$(pwd):/work" xz005g6-toolbox build
 ```
 
@@ -258,6 +260,3 @@ bad flash from ever reaching reboot.
 - [sta-c0000/tpconf_bin_xml](https://github.com/sta-c0000/tpconf_bin_xml) —
   tool for decrypting and re-encrypting TP-Link config backup files.
 
-## License
-
-MIT
